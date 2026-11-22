@@ -1,0 +1,1537 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>烟价计算器</title>
+<meta name="description" content="按进价、运费和倍数算单包价、整条价和利润">
+<meta name="robots" content="noindex">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<style>
+/* 布局：单列工具。顶部固定「标题 + 币种 + 搜索」，中间是这一单的烟，底部固定合计栏。 */
+:root {
+  --bg: oklch(1 0 0);
+  --panel: oklch(0.967 0.006 200);
+  --surface: oklch(1 0 0);
+  --ink: oklch(0.23 0.015 200);
+  --ink-2: oklch(0.45 0.014 200);
+  --line: oklch(0.9 0.008 200);
+  --line-strong: oklch(0.8 0.012 200);
+  --primary: oklch(0.5 0.09 200);
+  --primary-ink: oklch(1 0 0);
+  --primary-soft: oklch(0.94 0.03 200);
+  --good: oklch(0.48 0.12 152);
+  --bad: oklch(0.52 0.19 27);
+  --warn-soft: oklch(0.95 0.05 88);
+  --warn-ink: oklch(0.42 0.09 70);
+  --bar-bg: oklch(0.25 0.02 200);
+  --bar-fg: oklch(0.98 0.003 200);
+  --bar-muted: oklch(0.8 0.012 200);
+  --bar-good: oklch(0.83 0.13 155);
+  --bar-bad: oklch(0.8 0.13 30);
+
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --z-dropdown: 20;
+  --z-sticky: 30;
+  --z-toast: 40;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.17 0.008 200);
+    --panel: oklch(0.21 0.01 200);
+    --surface: oklch(0.205 0.01 200);
+    --ink: oklch(0.94 0.005 200);
+    --ink-2: oklch(0.74 0.012 200);
+    --line: oklch(0.31 0.012 200);
+    --line-strong: oklch(0.42 0.015 200);
+    --primary: oklch(0.76 0.09 200);
+    --primary-ink: oklch(0.18 0.02 200);
+    --primary-soft: oklch(0.3 0.04 200);
+    --good: oklch(0.8 0.13 152);
+    --bad: oklch(0.74 0.15 27);
+    --warn-soft: oklch(0.32 0.05 80);
+    --warn-ink: oklch(0.88 0.09 88);
+    --bar-bg: oklch(0.25 0.014 200);
+    --bar-fg: oklch(0.97 0.004 200);
+    --bar-muted: oklch(0.76 0.012 200);
+    --bar-good: oklch(0.83 0.13 155);
+    --bar-bad: oklch(0.8 0.13 30);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(0.17 0.008 200);
+  --panel: oklch(0.21 0.01 200);
+  --surface: oklch(0.205 0.01 200);
+  --ink: oklch(0.94 0.005 200);
+  --ink-2: oklch(0.74 0.012 200);
+  --line: oklch(0.31 0.012 200);
+  --line-strong: oklch(0.42 0.015 200);
+  --primary: oklch(0.76 0.09 200);
+  --primary-ink: oklch(0.18 0.02 200);
+  --primary-soft: oklch(0.3 0.04 200);
+  --good: oklch(0.8 0.13 152);
+  --bad: oklch(0.74 0.15 27);
+  --warn-soft: oklch(0.32 0.05 80);
+  --warn-ink: oklch(0.88 0.09 88);
+  --bar-bg: oklch(0.25 0.014 200);
+  --bar-fg: oklch(0.97 0.004 200);
+  --bar-muted: oklch(0.76 0.012 200);
+  --bar-good: oklch(0.83 0.13 155);
+  --bar-bad: oklch(0.8 0.13 30);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: var(--z-sticky);
+  background: var(--panel);
+}
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; touch-action: manipulation; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.i { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- 顶栏 ---------- */
+.top {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: var(--z-sticky);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.top .wrap { display: flex; flex-direction: column; gap: 10px; padding-block: 12px; }
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: 0.02em; }
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.seg button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 15px;
+  font-weight: 600;
+  transition: background-color 160ms var(--ease), color 160ms var(--ease);
+}
+.seg button[aria-checked="true"] { background: var(--primary); color: var(--primary-ink); }
+
+.combo { position: relative; }
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.search:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.search input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 17px;
+  outline: none;
+}
+.search input::placeholder { color: var(--ink-2); }
+.search input::-webkit-search-cancel-button { display: none; }
+.search .clear-q {
+  display: grid; place-items: center;
+  width: 36px; height: 36px; margin-right: -6px;
+  border: 0; border-radius: 999px; background: transparent; color: var(--ink-2);
+}
+
+.suggest {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0; right: 0;
+  z-index: var(--z-dropdown);
+  margin: 0; padding: 4px;
+  list-style: none;
+  max-height: min(60vh, 440px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px oklch(0.2 0.02 200 / 0.18);
+}
+.suggest .head { padding: 6px 10px 4px; font-size: 13px; color: var(--ink-2); }
+.opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.opt[aria-selected="true"], .opt:hover { background: var(--primary-soft); }
+.opt-main { display: flex; flex-direction: column; min-width: 0; }
+.opt-name { font-weight: 600; overflow-wrap: anywhere; }
+.opt-name mark { background: none; color: var(--primary); font-weight: 700; }
+.opt-meta { font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.opt-price { display: flex; flex-direction: column; align-items: flex-end; flex: none; font-size: 13px; color: var(--ink-2); }
+.opt-price b { color: var(--ink); font-size: 15px; }
+.opt.manual { justify-content: flex-start; color: var(--ink-2); border-top: 1px solid var(--line); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.opt.manual b { color: var(--primary); font-weight: 600; }
+
+/* ---------- 工具行和面板 ---------- */
+.tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-block: 14px 4px; }
+.status { margin: 0; font-size: 14px; color: var(--ink-2); min-width: 0; }
+.status b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.tool-btns { display: flex; gap: 8px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 15px; font-weight: 600;
+  transition: background-color 160ms var(--ease), border-color 160ms var(--ease);
+}
+.btn:hover { border-color: var(--primary); }
+.btn:active { background: var(--primary-soft); }
+.btn[aria-expanded="true"] { background: var(--primary-soft); border-color: var(--primary); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--ink-2); padding: 0 10px; }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 20px;
+  vertical-align: 1px;
+}
+.chip.warn { background: var(--warn-soft); color: var(--warn-ink); }
+.chip.info { background: var(--primary-soft); color: var(--ink); }
+
+.panel {
+  margin-top: 12px;
+  padding: 16px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.panel h2 { margin: 0; font-size: 17px; }
+.panel p { margin: 0; font-size: 14px; color: var(--ink-2); max-width: 60ch; }
+.panel .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > span:first-child { font-size: 14px; font-weight: 600; }
+.field input, .field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 16px;
+}
+.field input:focus, .field select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px var(--primary-soft); }
+.field .hint { font-size: 12px; color: var(--ink-2); }
+.field .err { font-size: 12px; color: var(--bad); }
+.field[data-invalid] input { border-color: var(--bad); }
+
+.file-pick { position: relative; align-self: flex-start; }
+.file-pick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.file-pick input:focus-visible + .btn { outline: 2px solid var(--primary); outline-offset: 2px; }
+.msg { font-size: 14px; }
+.msg:empty { display: none; }
+.msg[data-kind="error"] { color: var(--bad); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table-wrap th, .table-wrap td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.table-wrap th { font-weight: 600; color: var(--ink-2); font-size: 13px; }
+.table-wrap tr:last-child td { border-bottom: 0; }
+.table-wrap td.r, .table-wrap th.r { text-align: right; }
+
+/* ---------- 这一单 ---------- */
+.order-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-block: 18px 10px; }
+.order-head h2 { margin: 0; font-size: 17px; }
+.lines { display: flex; flex-direction: column; gap: 12px; }
+.empty { padding: 28px 16px; text-align: center; border: 1px dashed var(--line-strong); border-radius: var(--radius); color: var(--ink-2); }
+.empty p { margin: 0; }
+.empty .big { color: var(--ink); font-weight: 600; margin-bottom: 4px; }
+
+.line {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px 14px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.line.flash { animation: flash 900ms var(--ease); }
+@keyframes flash { from { background: var(--primary-soft); border-color: var(--primary); } }
+.line-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.line-name { margin: 0; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.line-meta { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.icon-btn {
+  display: grid; place-items: center;
+  width: 40px; height: 40px; margin: -6px -6px 0 0;
+  border: 0; border-radius: 999px; background: transparent; color: var(--ink-2);
+  flex: none;
+}
+.icon-btn:hover { background: var(--panel); color: var(--ink); }
+.cost-edit { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 14px; }
+.cost-edit input { width: 110px; min-height: 40px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); font-size: 16px; }
+
+.prices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.price { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.price > span { font-size: 13px; color: var(--ink-2); }
+.money {
+  display: flex; align-items: center;
+  min-height: 48px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.money:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.money[data-edited] { border-color: var(--warn-ink); background: var(--warn-soft); }
+.money .cur { color: var(--ink-2); font-weight: 600; font-size: 18px; }
+.money input {
+  flex: 1; min-width: 0; width: 100%;
+  height: 46px; padding: 0 0 0 4px;
+  border: 0; background: transparent; outline: none;
+  font-size: 21px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.edited-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: -4px 0 0; font-size: 13px; color: var(--warn-ink); }
+.edited-note .link { border: 0; background: none; padding: 4px 2px; color: var(--primary); font-weight: 600; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+
+.qtys { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.qty { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.qty label { padding-left: 6px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.qty .ctl { display: flex; align-items: center; flex: none; }
+.step {
+  display: grid; place-items: center;
+  width: 38px; height: 40px;
+  border: 0; border-radius: 6px;
+  background: var(--surface); color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.step:active { background: var(--primary-soft); }
+.qty input {
+  width: 36px; height: 40px; padding: 0;
+  border: 0; background: transparent; outline: none;
+  text-align: center; font-size: 18px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.line-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.line-sum div { min-width: 0; }
+.line-sum dt { font-size: 12px; color: var(--ink-2); }
+.line-sum dd { margin: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.line-sum dd[data-sign="pos"] { color: var(--good); }
+.line-sum dd[data-sign="neg"] { color: var(--bad); }
+.formula { margin: -4px 0 0; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* ---------- 合计栏 ---------- */
+.totals {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: var(--z-sticky);
+  background: var(--bar-bg);
+  color: var(--bar-fg);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -8px 24px oklch(0.2 0.02 200 / 0.12);
+}
+.totals .wrap { display: flex; flex-direction: column; gap: 6px; padding-block: 12px 10px; }
+.t-row { display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 8px; align-items: end; }
+.t-cell { display: flex; flex-direction: column; min-width: 0; }
+.t-cell span { font-size: 12px; color: var(--bar-muted); }
+.t-cell strong { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.25; }
+.t-cell.profit { text-align: right; }
+.t-cell.profit strong { font-size: 23px; }
+.t-cell.profit strong[data-sign="pos"] { color: var(--bar-good); }
+.t-cell.profit strong[data-sign="neg"] { color: var(--bar-bad); }
+.t-foot { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--bar-muted); }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(118px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex; align-items: center; gap: 12px;
+  max-width: calc(100% - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 14px;
+  box-shadow: 0 8px 24px oklch(0.2 0.02 200 / 0.25);
+  animation: toast-in 220ms var(--ease);
+}
+.toast button { border: 0; border-radius: 999px; padding: 6px 12px; background: var(--primary); color: var(--primary-ink); font-weight: 600; font-size: 14px; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+@media (min-width: 640px) {
+  h1 { font-size: 21px; }
+  .line { padding: 16px 18px 14px; }
+  .t-cell strong { font-size: 22px; }
+  .t-cell.profit strong { font-size: 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="wrap">
+    <div class="title-row">
+      <h1>烟价计算器</h1>
+      <div class="seg" role="radiogroup" aria-label="报价币种" id="seg">
+        <button type="button" role="radio" data-cur="GBP" aria-checked="true">£ 英镑</button>
+        <button type="button" role="radio" data-cur="USD" aria-checked="false">$ 美金</button>
+      </div>
+    </div>
+    <div class="combo">
+      <label class="vh" for="q">搜烟名</label>
+      <div class="search">
+        <svg class="i"><use href="#i-search"/></svg>
+        <input id="q" type="search" autocomplete="off" enterkeyhint="search"
+               placeholder="输入烟名里的几个字"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest">
+        <button type="button" class="clear-q" id="clear-q" aria-label="清空搜索" hidden><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <ul class="suggest" id="suggest" role="listbox" aria-label="搜索结果" hidden></ul>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="tools">
+    <p class="status" id="status"></p>
+    <div class="tool-btns">
+      <button type="button" class="btn" id="open-import" aria-expanded="false" aria-controls="import">
+        <svg class="i"><use href="#i-upload"/></svg>导入 Excel
+      </button>
+      <button type="button" class="btn" id="open-settings" aria-expanded="false" aria-controls="settings">
+        <svg class="i"><use href="#i-sliders"/></svg>设置
+      </button>
+    </div>
+  </div>
+
+  <section class="panel" id="import" hidden aria-labelledby="import-title">
+    <h2 id="import-title">导入进价表</h2>
+    <p>支持 Excel（.xlsx、.xls）和 CSV。表里要有<b>烟名</b>和<b>一条的进价</b>两列，第一行最好是表头。导入的表只保存在这台设备上，手机和电脑要各导入一次。</p>
+    <div class="file-pick">
+      <input type="file" id="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv">
+      <span class="btn primary" aria-hidden="true"><svg class="i"><use href="#i-upload"/></svg>选择文件</span>
+    </div>
+    <p class="msg" id="import-msg" role="status"></p>
+    <div id="import-preview" hidden>
+      <div class="fields">
+        <label class="field" id="sheet-field"><span>工作表</span><select id="map-sheet"></select></label>
+        <label class="field"><span>烟名在哪一列</span><select id="map-name"></select></label>
+        <label class="field"><span>进价在哪一列</span><select id="map-price"></select></label>
+      </div>
+      <p id="import-count" style="margin-top:12px"></p>
+      <div class="table-wrap" style="margin-top:8px"><table id="import-table"></table></div>
+      <div class="actions" style="margin-top:12px">
+        <button type="button" class="btn primary" id="import-apply">用这个表</button>
+        <button type="button" class="btn" id="import-cancel">取消</button>
+      </div>
+    </div>
+    <div class="actions" id="reset-row" hidden>
+      <button type="button" class="btn quiet danger" id="reset-table">不用导入的表，恢复自带的</button>
+    </div>
+  </section>
+
+  <section class="panel" id="settings" hidden aria-labelledby="settings-title">
+    <h2 id="settings-title">设置</h2>
+    <div class="fields" id="setting-fields"></div>
+    <div class="actions">
+      <button type="button" class="btn quiet" id="reset-settings">恢复默认值</button>
+    </div>
+  </section>
+
+  <div class="order-head">
+    <h2>这一单</h2>
+    <button type="button" class="btn quiet danger" id="clear-order" hidden>清空</button>
+  </div>
+  <div class="lines" id="lines"></div>
+  <div class="empty" id="empty" hidden>
+    <p class="big">这一单还没有烟</p>
+    <p>在上面输入烟名里的几个字，点一下就加进来。</p>
+  </div>
+</main>
+
+<footer class="totals">
+  <div class="wrap">
+    <div class="t-row">
+      <div class="t-cell"><span>总成本</span><strong id="t-cost">£0.00</strong></div>
+      <div class="t-cell"><span>总收入</span><strong id="t-rev">£0.00</strong></div>
+      <div class="t-cell profit"><span id="t-profit-label">总利润</span><strong id="t-profit" data-sign="pos">£0.00</strong></div>
+    </div>
+    <div class="t-foot"><span id="t-qty">共 0 条 0 包</span><span id="t-rate"></span></div>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" hidden><span id="toast-text"></span><button type="button" id="toast-btn" hidden>撤销</button></div>
+
+<script>
+/* 烟价计算器：纯计算和表格解析。浏览器里挂在 window.Calc，node 测试里 require。 */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.Calc = api;
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const DEFAULT_SETTINGS = Object.freeze({
+    rateGBP: 8.9, // 1 英镑 = 8.9 元
+    rateUSD: 6.7, // 1 美金 = 6.7 元
+    shipping: 90, // 每条运费，元
+    multiplier: 2, // 利润倍数
+    cartonDiscount: 0.5, // 整条买每包便宜多少
+    packsPerCarton: 10,
+  });
+
+  const toNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  const qty = (v) => Math.max(0, Math.floor(Number(v)) || 0);
+  const round2 = (x) => Math.round(x * 100) / 100;
+
+  /** 往上取到 0.5 的倍数；减一个极小值，免得 9.000000000000002 被抬成 9.5 */
+  function ceilHalf(x) {
+    return Math.max(0, Math.ceil(x * 2 - 1e-9) / 2);
+  }
+
+  function rateFor(s, currency) {
+    return currency === 'USD' ? s.rateUSD : s.rateGBP;
+  }
+
+  function cartonFromPack(pack, s) {
+    return Math.max(0, round2((pack - s.cartonDiscount) * s.packsPerCarton));
+  }
+
+  /** 按规则算出建议价。cost 是一条的进价（人民币）。 */
+  function quote(cost, s, currency) {
+    const rate = rateFor(s, currency);
+    const n = s.packsPerCarton;
+    const cartonCostRMB = toNum(cost) + toNum(s.shipping);
+    const cartonCost = cartonCostRMB / rate;
+    const rawTen = (cartonCostRMB * s.multiplier) / rate;
+    const pack = ceilHalf(rawTen / n);
+    return {
+      rate,
+      cartonCostRMB,
+      cartonCost,
+      packCost: cartonCost / n,
+      rawTen,
+      pack,
+      carton: cartonFromPack(pack, s),
+    };
+  }
+
+  /** 叠加手动改价。改价按币种分开存：line.override = { GBP: { pack, carton }, USD: {...} } */
+  function linePrices(line, s, currency) {
+    const q = quote(line.cost, s, currency);
+    const o = (line.override && line.override[currency]) || {};
+    const packEdited = isNum(o.pack);
+    const cartonEdited = isNum(o.carton);
+    const pack = packEdited ? o.pack : q.pack;
+    let carton = q.carton;
+    if (cartonEdited) carton = o.carton;
+    else if (packEdited) carton = cartonFromPack(pack, s);
+    return { quote: q, pack, carton, packEdited, cartonEdited };
+  }
+
+  function lineTotals(line, s, currency) {
+    const p = linePrices(line, s, currency);
+    const cartons = qty(line.cartons);
+    const packs = qty(line.packs);
+    const revenue = round2(cartons * p.carton + packs * p.pack);
+    const cost = cartons * p.quote.cartonCost + packs * p.quote.packCost;
+    return { ...p, cartons, packs, revenue, cost, profit: revenue - cost };
+  }
+
+  function orderTotals(lines, s, currency) {
+    const t = { revenue: 0, cost: 0, profit: 0, cartons: 0, packs: 0 };
+    for (const line of lines) {
+      const l = lineTotals(line, s, currency);
+      t.revenue += l.revenue;
+      t.cost += l.cost;
+      t.cartons += l.cartons;
+      t.packs += l.packs;
+    }
+    t.revenue = round2(t.revenue);
+    t.profit = t.revenue - t.cost;
+    return t;
+  }
+
+  /** 搜索用的归一化：去空格、全角转半角、转小写 */
+  function normalize(str) {
+    return String(str == null ? '' : str)
+      .replace(/[！-～]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+      .replace(/　/g, ' ')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+  }
+
+  /**
+   * 输入的字按顺序出现在名字里就算匹配，中间可以隔字（「示烟」→ 示例烟）。
+   * 返回 { rank, pos }：rank 0 = 开头连着对上，1 = 中间连着对上，2 = 隔字对上；
+   * pos = 对上的字在原名字里的位置（按字算），用来高亮。对不上返回 null。
+   */
+  function match(name, query) {
+    const q = normalize(query);
+    if (!q) return null;
+    const chars = Array.from(String(name == null ? '' : name));
+    let s = '';
+    const at = []; // s 里每个位置对应原名字的第几个字
+    chars.forEach((ch, i) => {
+      const n = normalize(ch);
+      for (let k = 0; k < n.length; k++) at.push(i);
+      s += n;
+    });
+    const start = s.indexOf(q);
+    if (start >= 0) {
+      return { rank: start === 0 ? 0 : 1, pos: dedupe(at.slice(start, start + q.length)) };
+    }
+    const pos = [];
+    let j = 0;
+    for (let k = 0; k < s.length && j < q.length; k++) {
+      if (s[k] === q[j]) {
+        pos.push(at[k]);
+        j++;
+      }
+    }
+    return j === q.length ? { rank: 2, pos: dedupe(pos) } : null;
+  }
+  const dedupe = (arr) => arr.filter((v, i) => arr.indexOf(v) === i);
+
+  function matchPositions(name, query) {
+    const m = match(name, query);
+    return m ? m.pos : null;
+  }
+
+  /** 开头对上的排最前，其次是中间连着对上的，隔字对上的排最后；同一档按表里的顺序 */
+  function search(items, query) {
+    if (!normalize(query)) return [];
+    const hits = [];
+    items.forEach((item, i) => {
+      const m = match(item.name, query);
+      if (m) hits.push({ item, rank: m.rank, i });
+    });
+    hits.sort((a, b) => a.rank - b.rank || a.i - b.i);
+    return hits.map((h) => h.item);
+  }
+
+  function parseNumber(v) {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+    const s = String(v == null ? '' : v).replace(/[,，\s]/g, '');
+    const m = s.match(/-?\d+(?:\.\d+)?/);
+    return m ? Number(m[0]) : NaN;
+  }
+
+  /** 读 CSV（Excel「另存为 CSV」的格式），不用联网加载组件。支持引号、逗号或 Tab 分隔。 */
+  function parseCSV(text) {
+    const s = String(text == null ? '' : text).replace(/^﻿/, '');
+    const firstLine = s.slice(0, s.search(/\r?\n|$/));
+    const count = (re) => (firstLine.match(re) || []).length;
+    const delim = count(/\t/g) > count(/,/g) ? '\t' : ',';
+    const rows = [];
+    let row = [];
+    let field = '';
+    let quoted = false;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (quoted) {
+        if (c === '"') {
+          if (s[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else quoted = false;
+        } else field += c;
+      } else if (c === '"' && field === '') {
+        quoted = true;
+      } else if (c === delim) {
+        row.push(field);
+        field = '';
+      } else if (c === '\r' || c === '\n') {
+        if (c === '\r' && s[i + 1] === '\n') i++;
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      } else field += c;
+    }
+    if (field !== '' || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+    return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
+  }
+
+  const NAME_RE =/烟名|品名|名称|名字|商品|产品|品牌|品种|货品|name/i;
+  const PRICE_TIERS = [/进价|进货|拿货|成本|cost/i, /批发/, /价格|单价|价钱|price/i, /价/];
+  const isBlank = (c) => c == null || String(c).trim() === '';
+
+  /** 找出表头行、烟名列、进价列。认不出表头就按「文字最多的列」「数字最多的列」猜。 */
+  function detectColumns(rows) {
+    const limit = Math.min(rows.length, 15);
+    for (let r = 0; r < limit; r++) {
+      const row = (rows[r] || []).map((c) => (isBlank(c) ? '' : String(c).trim()));
+      const nameCol = row.findIndex((c) => c && NAME_RE.test(c));
+      if (nameCol < 0) continue;
+      for (const tier of PRICE_TIERS) {
+        const priceCol = row.findIndex((c, i) => i !== nameCol && c && tier.test(c));
+        if (priceCol >= 0) return { headerRow: r, nameCol, priceCol };
+      }
+    }
+    const sample = rows.slice(0, 40);
+    const width = sample.reduce((w, row) => Math.max(w, (row || []).length), 0);
+    const text = new Array(width).fill(0);
+    const nums = new Array(width).fill(0);
+    for (const row of sample) {
+      (row || []).forEach((c, i) => {
+        if (isBlank(c)) return;
+        if (Number.isFinite(parseNumber(c)) && !/[一-龥a-z]{2,}/i.test(String(c))) nums[i]++;
+        else text[i]++;
+      });
+    }
+    const argmax = (arr, skip) =>
+      arr.reduce((best, v, i) => (i !== skip && v > 0 && (best < 0 || v > arr[best]) ? i : best), -1);
+    const nameCol = argmax(text, -1);
+    return { headerRow: -1, nameCol, priceCol: argmax(nums, nameCol) };
+  }
+
+  function tableFromRows(rows, map) {
+    const { headerRow, nameCol, priceCol } = map;
+    const width = rows.reduce((w, row) => Math.max(w, (row || []).length), 0);
+    const head = headerRow >= 0 ? rows[headerRow] || [] : [];
+    const headers = Array.from({ length: width }, (_, i) =>
+      isBlank(head[i]) ? `第${i + 1}列` : String(head[i]).trim()
+    );
+    const items = [];
+    let skipped = 0;
+    for (let r = headerRow + 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      if (row.every(isBlank)) continue;
+      const name = isBlank(row[nameCol]) ? '' : String(row[nameCol]).trim();
+      const cost = parseNumber(row[priceCol]);
+      if (!name || !(cost > 0)) {
+        skipped++;
+        continue;
+      }
+      const extra = {};
+      row.forEach((c, i) => {
+        if (i === nameCol || i === priceCol || isBlank(c)) return;
+        extra[headers[i]] = String(c).trim();
+      });
+      items.push({ name, cost, extra });
+    }
+    return { items, skipped, headers };
+  }
+
+  return {
+    DEFAULT_SETTINGS,
+    ceilHalf,
+    quote,
+    linePrices,
+    lineTotals,
+    orderTotals,
+    normalize,
+    search,
+    matchPositions,
+    parseNumber,
+    parseCSV,
+    detectColumns,
+    tableFromRows,
+  };
+});
+
+</script>
+<script>
+/* 自带价格表。只放一条不带牌子的示例，真实进价由朋友在每台设备上导入 Excel。cost = 一条的进价（人民币）。 */
+(typeof self !== 'undefined' ? self : this).DEFAULT_PRICES = {
+  label: '示例价格',
+  isExample: true,
+  items: [{ name: '示例烟（进价 300）', cost: 300, extra: {} }],
+};
+
+</script>
+<script>
+(() => {
+  'use strict';
+  const C = window.Calc;
+  const BUILTIN = window.DEFAULT_PRICES;
+  const KEY = 'cig-price-calc/v1';
+  const XLSX_URLS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+  ];
+  const SYM = { GBP: '£', USD: '$' };
+  const CUR_NAME = { GBP: '英镑', USD: '美金' };
+
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const round2 = (x) => Math.round(x * 100) / 100;
+
+  /* ---------- 存取（只在这台设备的浏览器里） ---------- */
+  function loadSaved() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch (e) { return null; }
+  }
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        v: 1, settings: state.settings, currency: state.currency, order: state.order, table: state.table,
+      }));
+    } catch (e) { /* 存不了就算了，页面照样能用 */ }
+  }
+
+  const SETTING_FIELDS = [
+    { key: 'rateGBP', label: '英镑汇率', hint: '1 英镑换多少人民币', min: 0, strict: true },
+    { key: 'rateUSD', label: '美金汇率', hint: '1 美金换多少人民币', min: 0, strict: true },
+    { key: 'shipping', label: '运费', hint: '每条，人民币', min: 0 },
+    { key: 'multiplier', label: '利润倍数', hint: '成本乘几', min: 0, strict: true },
+    { key: 'cartonDiscount', label: '整条每包便宜', hint: '外币，单包价减多少', min: 0 },
+    { key: 'packsPerCarton', label: '一条几包', hint: '一般是 10', min: 0, strict: true, int: true },
+  ];
+  const validSetting = (f, v) => Number.isFinite(v) && (f.strict ? v > f.min : v >= f.min) && (!f.int || Number.isInteger(v));
+
+  const saved = loadSaved();
+  const state = {
+    settings: { ...C.DEFAULT_SETTINGS },
+    currency: saved && saved.currency === 'USD' ? 'USD' : 'GBP',
+    order: saved && Array.isArray(saved.order) ? saved.order.filter((l) => l && typeof l.name === 'string') : [],
+    table: saved && saved.table && Array.isArray(saved.table.items) ? saved.table : null,
+  };
+  if (saved && saved.settings) {
+    for (const f of SETTING_FIELDS) {
+      const v = Number(saved.settings[f.key]);
+      if (validSetting(f, v)) state.settings[f.key] = v;
+    }
+  }
+  let nextId = state.order.reduce((m, l) => Math.max(m, Number(l.id) || 0), 0) + 1;
+  state.order.forEach((l) => { if (!l.id) l.id = nextId++; if (!l.override) l.override = {}; });
+
+  const priceTable = () => state.table || BUILTIN;
+
+  function newLine(item, manual) {
+    return {
+      id: nextId++, name: item.name, cost: manual ? 0 : item.cost,
+      extra: item.extra || {}, manual: !!manual, cartons: 1, packs: 0, override: {},
+    };
+  }
+
+  // 第一次打开：放一行例子，看得出这个工具怎么用
+  if (!saved && BUILTIN.isExample) {
+    const ex = BUILTIN.items.find((i) => i.cost === 300);
+    if (ex) state.order.push(newLine(ex, false));
+  }
+
+  /* ---------- 格式 ---------- */
+  const sym = () => SYM[state.currency];
+  function fmtMoney(x) {
+    const v = round2(x);
+    return (v < 0 ? '−' : '') + sym() + Math.abs(v).toFixed(2);
+  }
+  function fmtPrice(x) {
+    const v = round2(x);
+    if (Number.isInteger(v)) return String(v);
+    return Number.isInteger(v * 2) ? v.toFixed(1) : String(v);
+  }
+  const fmtRMB = (x) => '¥' + (Number.isInteger(round2(x)) ? round2(x) : round2(x).toFixed(2));
+  const sign = (x) => (round2(x) < 0 ? 'neg' : 'pos');
+  function fmtDate(ts) {
+    const d = new Date(ts);
+    return isNaN(d) ? '' : `${d.getMonth() + 1}月${d.getDate()}日`;
+  }
+
+  /* ---------- 价格表状态 ---------- */
+  function renderStatus() {
+    const t = priceTable();
+    const el = $('#status');
+    if (state.table) {
+      el.innerHTML = `价格表 <b>${esc(t.fileName || '导入的表')}</b> · ${t.items.length} 款 · ${fmtDate(t.importedAt)}导入`;
+    } else if (BUILTIN.isExample) {
+      el.innerHTML = `<span class="chip warn">示例</span> 现在是示例价格，导入你的进价表后替换`;
+    } else {
+      el.innerHTML = `价格表 <b>${esc(BUILTIN.label || '自带')}</b> · ${t.items.length} 款`;
+    }
+    $('#reset-row').hidden = !state.table;
+  }
+
+  /* ---------- 币种 ---------- */
+  const seg = $('#seg');
+  function renderSeg() {
+    seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.cur === state.currency)));
+  }
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-cur]');
+    if (!b || b.dataset.cur === state.currency) return;
+    state.currency = b.dataset.cur;
+    save();
+    renderSeg();
+    renderOrder();
+    if (!list.hidden) renderSuggest();
+  });
+  seg.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const next = state.currency === 'GBP' ? 'USD' : 'GBP';
+    seg.querySelector(`[data-cur="${next}"]`).click();
+    seg.querySelector(`[data-cur="${next}"]`).focus();
+  });
+
+  /* ---------- 搜索下拉 ---------- */
+  const q = $('#q');
+  const list = $('#suggest');
+  let results = [];
+  let active = -1;
+
+  /** 对上的字标出来；隔字匹配时一个个标（「示烟」→ <示>例<烟>） */
+  function highlight(name, text) {
+    const pos = new Set(C.matchPositions(name, text) || []);
+    return Array.from(name).map((ch, i) => (pos.has(i) ? `<mark>${esc(ch)}</mark>` : esc(ch))).join('');
+  }
+  /** 表里其他列：「规格 短支」；没有表头的列只显示值 */
+  function extraBits(extra) {
+    return Object.entries(extra || {}).map(([k, v]) => (/^第\d+列$/.test(k) ? v : `${k} ${v}`));
+  }
+  function metaText(item) {
+    return [`进价 ${fmtRMB(item.cost)}`, ...extraBits(item.extra)].join(' · ');
+  }
+  function renderSuggest() {
+    const text = q.value.trim();
+    $('#clear-q').hidden = !q.value;
+    if (!text) { closeSuggest(); return; }
+    results = C.search(priceTable().items, text).slice(0, 50);
+    const html = [];
+    html.push(`<li class="head" role="presentation">${results.length ? `找到 ${results.length} 款，点一下加进这一单` : `表里没有带「${esc(text)}」的烟`}</li>`);
+    results.forEach((item, i) => {
+      const p = C.quote(item.cost, state.settings, state.currency);
+      html.push(`<li class="opt" role="option" id="opt-${i}" data-i="${i}" aria-selected="false">
+        <div class="opt-main"><span class="opt-name">${highlight(item.name, text)}</span><span class="opt-meta">${esc(metaText(item))}</span></div>
+        <div class="opt-price num"><span>单包 <b>${sym()}${fmtPrice(p.pack)}</b></span><span>整条 <b>${sym()}${fmtPrice(p.carton)}</b></span></div>
+      </li>`);
+    });
+    html.push(`<li class="opt manual" role="option" id="opt-manual" data-manual="1" aria-selected="false"><span>表里没有？<b>手动添加「${esc(text)}」</b></span></li>`);
+    list.innerHTML = html.join('');
+    list.hidden = false;
+    q.setAttribute('aria-expanded', 'true');
+    setActive(results.length ? 0 : -1);
+  }
+  function options() { return [...list.querySelectorAll('.opt')]; }
+  function setActive(i) {
+    const opts = options();
+    active = i;
+    opts.forEach((o, k) => o.setAttribute('aria-selected', String(k === i)));
+    if (i >= 0 && opts[i]) {
+      q.setAttribute('aria-activedescendant', opts[i].id);
+      opts[i].scrollIntoView({ block: 'nearest' });
+    } else q.removeAttribute('aria-activedescendant');
+  }
+  function closeSuggest() {
+    list.hidden = true;
+    list.innerHTML = '';
+    active = -1;
+    q.setAttribute('aria-expanded', 'false');
+    q.removeAttribute('aria-activedescendant');
+  }
+  function choose(opt) {
+    if (!opt) return;
+    if (opt.dataset.manual) addLine({ name: q.value.trim(), cost: 0, extra: {} }, true);
+    else addLine(results[Number(opt.dataset.i)], false);
+    q.value = '';
+    $('#clear-q').hidden = true;
+    closeSuggest();
+    q.blur();
+  }
+  q.addEventListener('input', renderSuggest);
+  q.addEventListener('focus', () => { if (q.value.trim()) renderSuggest(); });
+  q.addEventListener('blur', () => setTimeout(closeSuggest, 120));
+  q.addEventListener('keydown', (e) => {
+    const n = options().length;
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (list.hidden) renderSuggest(); else setActive((active + 1) % n); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (n) setActive((active - 1 + n) % n); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (!list.hidden) choose(options()[active >= 0 ? active : 0]); }
+    else if (e.key === 'Escape') { closeSuggest(); }
+  });
+  list.addEventListener('mousedown', (e) => e.preventDefault());
+  list.addEventListener('click', (e) => choose(e.target.closest('.opt')));
+  $('#clear-q').addEventListener('click', () => { q.value = ''; closeSuggest(); $('#clear-q').hidden = true; q.focus(); });
+
+  /* ---------- 这一单 ---------- */
+  const linesBox = $('#lines');
+  const cardOf = (id) => linesBox.querySelector(`.line[data-id="${id}"]`);
+  const lineOf = (el) => state.order.find((l) => String(l.id) === el.closest('.line').dataset.id);
+
+  function addLine(item, manual) {
+    if (!item || !item.name) return;
+    if (!manual) {
+      const dup = state.order.find((l) => !l.manual && l.name === item.name);
+      if (dup) {
+        flash(dup.id);
+        toast(`「${dup.name}」已经在这一单里了`);
+        return;
+      }
+    }
+    const line = newLine(item, manual);
+    state.order.unshift(line);
+    save();
+    renderOrder();
+    flash(line.id);
+    if (manual) {
+      const input = cardOf(line.id).querySelector('[data-f="cost"]');
+      input.focus();
+    }
+  }
+  function flash(id) {
+    const card = cardOf(id);
+    if (!card) return;
+    card.classList.remove('flash');
+    void card.offsetWidth;
+    card.classList.add('flash');
+    card.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }
+
+  function cardHTML(line) {
+    const id = line.id;
+    const costPart = line.manual
+      ? `<div class="cost-edit"><label for="cost-${id}">进价（每条）¥</label><input id="cost-${id}" data-f="cost" inputmode="decimal" autocomplete="off" value="${line.cost ? fmtPrice(line.cost) : ''}" placeholder="填进价"></div>`
+      : '';
+    return `<article class="line" data-id="${id}">
+      <div class="line-head">
+        <div>
+          <h3 class="line-name">${esc(line.name)}</h3>
+          <p class="line-meta" data-o="meta"></p>
+          ${costPart}
+        </div>
+        <button type="button" class="icon-btn" data-act="remove" aria-label="从这一单移除 ${esc(line.name)}"><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="prices">
+        <div class="price">
+          <span id="lp-${id}">单包价</span>
+          <div class="money" data-m="pack"><span class="cur">${sym()}</span><input data-f="pack" inputmode="decimal" autocomplete="off" aria-labelledby="lp-${id}"></div>
+        </div>
+        <div class="price">
+          <span id="lc-${id}">整条价</span>
+          <div class="money" data-m="carton"><span class="cur">${sym()}</span><input data-f="carton" inputmode="decimal" autocomplete="off" aria-labelledby="lc-${id}"></div>
+        </div>
+      </div>
+      <p class="edited-note" data-o="edited" hidden></p>
+      <div class="qtys">
+        <div class="qty"><label for="qc-${id}">条</label><div class="ctl">
+          <button type="button" class="step" data-act="dec" data-q="cartons" aria-label="少一条"><svg class="i"><use href="#i-minus"/></svg></button>
+          <input id="qc-${id}" data-f="cartons" inputmode="numeric" autocomplete="off" value="${line.cartons || 0}">
+          <button type="button" class="step" data-act="inc" data-q="cartons" aria-label="多一条"><svg class="i"><use href="#i-plus"/></svg></button>
+        </div></div>
+        <div class="qty"><label for="qp-${id}">包</label><div class="ctl">
+          <button type="button" class="step" data-act="dec" data-q="packs" aria-label="少一包"><svg class="i"><use href="#i-minus"/></svg></button>
+          <input id="qp-${id}" data-f="packs" inputmode="numeric" autocomplete="off" value="${line.packs || 0}">
+          <button type="button" class="step" data-act="inc" data-q="packs" aria-label="多一包"><svg class="i"><use href="#i-plus"/></svg></button>
+        </div></div>
+      </div>
+      <dl class="line-sum">
+        <div><dt>收入</dt><dd data-o="rev"></dd></div>
+        <div><dt>成本</dt><dd data-o="cost"></dd></div>
+        <div><dt data-o="profit-label">利润</dt><dd data-o="profit"></dd></div>
+      </dl>
+      <p class="formula" data-o="formula"></p>
+    </article>`;
+  }
+
+  function setVal(input, v) {
+    if (input && document.activeElement !== input) input.value = v;
+  }
+
+  function updateCard(line) {
+    const card = cardOf(line.id);
+    if (!card) return;
+    const s = state.settings;
+    const t = C.lineTotals(line, s, state.currency);
+    const q0 = t.quote;
+    const o = (f) => card.querySelector(`[data-o="${f}"]`);
+
+    const meta = [];
+    if (!line.manual) meta.push(`进价 ${fmtRMB(line.cost)}`);
+    meta.push(...extraBits(line.extra));
+    meta.push(`一条成本 ${fmtMoney(q0.cartonCost)}`);
+    if (line.missing) meta.push('新表里没有这款，用的是旧进价');
+    o('meta').textContent = meta.join(' · ');
+
+    setVal(card.querySelector('[data-f="pack"]'), fmtPrice(t.pack));
+    setVal(card.querySelector('[data-f="carton"]'), fmtPrice(t.carton));
+    card.querySelector('[data-m="pack"]').toggleAttribute('data-edited', t.packEdited);
+    card.querySelector('[data-m="carton"]').toggleAttribute('data-edited', t.cartonEdited);
+
+    const note = o('edited');
+    if (t.packEdited || t.cartonEdited) {
+      note.hidden = false;
+      note.innerHTML = `<span>已手动改价。建议价：单包 ${sym()}${fmtPrice(q0.pack)}，整条 ${sym()}${fmtPrice(q0.carton)}</span><button type="button" class="link" data-act="reset">恢复建议价</button>`;
+    } else {
+      note.hidden = true;
+      note.innerHTML = '';
+    }
+
+    o('rev').textContent = fmtMoney(t.revenue);
+    o('cost').textContent = fmtMoney(t.cost);
+    o('profit').textContent = fmtMoney(t.profit);
+    o('profit').dataset.sign = sign(t.profit);
+    o('profit-label').textContent = sign(t.profit) === 'neg' ? '亏损' : '利润';
+
+    if (line.manual && !(line.cost > 0)) {
+      o('formula').textContent = '先填这款烟一条的进价，价格才准。';
+    } else {
+      o('formula').textContent =
+        `建议价算法：(${fmtRMB(line.cost)} + ${fmtRMB(s.shipping)}) × ${s.multiplier} ÷ ${q0.rate} = ${sym()}${q0.rawTen.toFixed(2)}` +
+        ` → 单包 ${sym()}${fmtPrice(q0.pack)} → 整条 ${sym()}${fmtPrice(q0.carton)}`;
+    }
+  }
+
+  function renderOrder() {
+    linesBox.innerHTML = state.order.map(cardHTML).join('');
+    state.order.forEach(updateCard);
+    $('#empty').hidden = state.order.length > 0;
+    $('#clear-order').hidden = state.order.length === 0;
+    resetClearConfirm();
+    renderTotals();
+  }
+
+  function renderTotals() {
+    const t = C.orderTotals(state.order, state.settings, state.currency);
+    $('#t-cost').textContent = fmtMoney(t.cost);
+    $('#t-rev').textContent = fmtMoney(t.revenue);
+    const p = $('#t-profit');
+    p.textContent = fmtMoney(t.profit);
+    p.dataset.sign = sign(t.profit);
+    $('#t-profit-label').textContent = sign(t.profit) === 'neg' ? '总亏损' : '总利润';
+    $('#t-qty').textContent = `共 ${t.cartons} 条 ${t.packs} 包`;
+    const rate = state.currency === 'USD' ? state.settings.rateUSD : state.settings.rateGBP;
+    $('#t-rate').textContent = `1 ${CUR_NAME[state.currency]} = ¥${rate}`;
+  }
+
+  const refresh = (line) => { updateCard(line); renderTotals(); save(); };
+
+  linesBox.addEventListener('input', (e) => {
+    const input = e.target.closest('input[data-f]');
+    if (!input) return;
+    const line = lineOf(input);
+    const f = input.dataset.f;
+    const raw = input.value.trim();
+    if (f === 'cartons' || f === 'packs') {
+      line[f] = Math.max(0, parseInt(raw, 10) || 0);
+    } else if (f === 'cost') {
+      const v = C.parseNumber(raw);
+      line.cost = Number.isFinite(v) && v >= 0 ? v : 0;
+    } else {
+      const cur = state.currency;
+      const ov = (line.override[cur] = line.override[cur] || {});
+      const v = C.parseNumber(raw);
+      if (raw === '') delete ov[f];
+      else if (Number.isFinite(v) && v >= 0) ov[f] = v;
+      else return;
+      // 改回和建议价一样，就当没改
+      const plain = C.linePrices({ ...line, override: { [cur]: f === 'pack' ? { carton: ov.carton } : { pack: ov.pack } } }, state.settings, cur);
+      if (ov[f] === plain[f]) delete ov[f];
+      if (!Object.keys(ov).some((k) => ov[k] != null)) delete line.override[cur];
+    }
+    refresh(line);
+  });
+  linesBox.addEventListener('focusout', (e) => {
+    const input = e.target.closest('input[data-f]');
+    if (!input) return;
+    const line = lineOf(input);
+    if (!line) return;
+    const f = input.dataset.f;
+    if (f === 'cartons' || f === 'packs') input.value = line[f] || 0;
+    else if (f === 'cost') input.value = line.cost ? fmtPrice(line.cost) : '';
+    else {
+      const t = C.linePrices(line, state.settings, state.currency);
+      input.value = fmtPrice(t[f]);
+    }
+  });
+  linesBox.addEventListener('focusin', (e) => {
+    const input = e.target.closest('input[data-f]');
+    if (input) setTimeout(() => { try { input.select(); } catch (err) { /* 有些浏览器不让选 */ } }, 0);
+  });
+  linesBox.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const line = lineOf(btn);
+    const act = btn.dataset.act;
+    if (act === 'inc' || act === 'dec') {
+      const k = btn.dataset.q;
+      line[k] = Math.max(0, (Number(line[k]) || 0) + (act === 'inc' ? 1 : -1));
+      cardOf(line.id).querySelector(`[data-f="${k}"]`).value = line[k];
+      refresh(line);
+    } else if (act === 'reset') {
+      delete line.override[state.currency];
+      refresh(line);
+    } else if (act === 'remove') {
+      const idx = state.order.indexOf(line);
+      state.order.splice(idx, 1);
+      save();
+      renderOrder();
+      toast(`已移除「${line.name}」`, '撤销', () => {
+        state.order.splice(Math.min(idx, state.order.length), 0, line);
+        save();
+        renderOrder();
+        flash(line.id);
+      });
+    }
+  });
+
+  /* 清空：点两下才清，免得手滑 */
+  const clearBtn = $('#clear-order');
+  let clearTimer = 0;
+  function resetClearConfirm() {
+    clearTimeout(clearTimer);
+    clearBtn.dataset.armed = '';
+    clearBtn.textContent = '清空';
+  }
+  clearBtn.addEventListener('click', () => {
+    if (!clearBtn.dataset.armed) {
+      clearBtn.dataset.armed = '1';
+      clearBtn.textContent = '再点一次清空';
+      clearTimer = setTimeout(resetClearConfirm, 3000);
+      return;
+    }
+    const old = state.order.slice();
+    state.order = [];
+    save();
+    renderOrder();
+    toast('已清空这一单', '撤销', () => { state.order = old; save(); renderOrder(); });
+  });
+
+  /* ---------- 提示条 ---------- */
+  let toastTimer = 0;
+  function toast(text, actionLabel, action) {
+    const el = $('#toast');
+    const btn = $('#toast-btn');
+    $('#toast-text').textContent = text;
+    btn.hidden = !action;
+    btn.textContent = actionLabel || '';
+    btn.onclick = action ? () => { el.hidden = true; action(); } : null;
+    el.hidden = false;
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, action ? 5000 : 2600);
+  }
+
+  /* ---------- 面板开关 ---------- */
+  function togglePanel(btn, panel, open) {
+    const willOpen = open == null ? panel.hidden : open;
+    panel.hidden = !willOpen;
+    btn.setAttribute('aria-expanded', String(willOpen));
+    return willOpen;
+  }
+  const importBtn = $('#open-import');
+  const importPanel = $('#import');
+  const settingsBtn = $('#open-settings');
+  const settingsPanel = $('#settings');
+  importBtn.addEventListener('click', () => {
+    if (togglePanel(importBtn, importPanel)) {
+      togglePanel(settingsBtn, settingsPanel, false);
+      loadXLSX().catch(() => {});
+    }
+  });
+  settingsBtn.addEventListener('click', () => {
+    if (togglePanel(settingsBtn, settingsPanel)) togglePanel(importBtn, importPanel, false);
+  });
+
+  /* ---------- 设置 ---------- */
+  const fieldsBox = $('#setting-fields');
+  fieldsBox.innerHTML = SETTING_FIELDS.map((f) => `
+    <label class="field" data-key="${f.key}">
+      <span>${f.label}</span>
+      <input id="set-${f.key}" inputmode="decimal" autocomplete="off" value="${state.settings[f.key]}">
+      <span class="hint">${f.hint}</span>
+      <span class="err" hidden></span>
+    </label>`).join('');
+  fieldsBox.addEventListener('input', (e) => {
+    const box = e.target.closest('.field');
+    if (!box) return;
+    const f = SETTING_FIELDS.find((x) => x.key === box.dataset.key);
+    const v = Number(e.target.value.trim());
+    const err = box.querySelector('.err');
+    if (!validSetting(f, v)) {
+      box.setAttribute('data-invalid', '');
+      err.hidden = false;
+      err.textContent = f.int ? '请填大于 0 的整数' : (f.strict ? '请填大于 0 的数字' : '请填 0 或更大的数字');
+      return;
+    }
+    box.removeAttribute('data-invalid');
+    err.hidden = true;
+    state.settings[f.key] = v;
+    save();
+    renderOrder();
+  });
+  fieldsBox.addEventListener('focusout', (e) => {
+    const box = e.target.closest('.field');
+    if (!box) return;
+    e.target.value = state.settings[box.dataset.key];
+    box.removeAttribute('data-invalid');
+    box.querySelector('.err').hidden = true;
+  });
+  $('#reset-settings').addEventListener('click', () => {
+    state.settings = { ...C.DEFAULT_SETTINGS };
+    for (const f of SETTING_FIELDS) $(`#set-${f.key}`).value = state.settings[f.key];
+    save();
+    renderOrder();
+    toast('设置已恢复默认值');
+  });
+
+  /* ---------- 导入 Excel ---------- */
+  /** 读 Excel 的组件按顺序试三个来源，一个打不开就换下一个 */
+  function loadScript(src, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      const timer = setTimeout(() => { s.remove(); reject(new Error('timeout')); }, timeoutMs);
+      s.src = src;
+      s.onload = () => { clearTimeout(timer); resolve(); };
+      s.onerror = () => { clearTimeout(timer); s.remove(); reject(new Error('load failed')); };
+      (document.head || document.documentElement).appendChild(s);
+    });
+  }
+  let xlsxPromise = null;
+  function loadXLSX() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (!xlsxPromise) {
+      xlsxPromise = (async () => {
+        for (const url of XLSX_URLS) {
+          try {
+            await loadScript(url, 12000);
+            if (window.XLSX) return window.XLSX;
+          } catch (e) { /* 换下一个 */ }
+        }
+        throw new Error('XLSX unavailable');
+      })();
+      xlsxPromise.catch(() => { xlsxPromise = null; });
+    }
+    return xlsxPromise;
+  }
+
+  const msg = $('#import-msg');
+  const preview = $('#import-preview');
+  let wb = null; // { fileName, sheets: [{ name, rows }] }
+  let draft = null; // { sheet, headerRow, nameCol, priceCol, parsed }
+
+  function setMsg(text, kind) {
+    msg.textContent = text;
+    msg.dataset.kind = kind || '';
+  }
+
+  function decodeCSV(buf) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+    catch (e) { return new TextDecoder('gbk').decode(buf); }
+  }
+
+  $('#file').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    preview.hidden = true;
+    setMsg(`正在读取「${file.name}」…`);
+    const isCSV = /\.csv$/i.test(file.name);
+    let X = null;
+    if (!isCSV) {
+      try { X = await loadXLSX(); }
+      catch (err) {
+        setMsg('读取 Excel 用的组件没加载上。检查一下网络再选一次；或者在 Excel 里「另存为」CSV 格式再导入，CSV 不用联网也能读。', 'error');
+        return;
+      }
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      let sheets;
+      if (isCSV) {
+        sheets = [{ name: file.name, rows: C.parseCSV(decodeCSV(buf)) }];
+      } else {
+        const book = X.read(buf, { type: 'array' });
+        sheets = book.SheetNames.map((name) => ({
+          name,
+          rows: X.utils.sheet_to_json(book.Sheets[name], { header: 1, raw: true, defval: '', blankrows: false }),
+        }));
+      }
+      sheets = sheets.filter((s) => s.rows.length);
+      if (!sheets.length) { setMsg('这个文件里是空的，没找到任何数据。', 'error'); return; }
+      wb = { fileName: file.name, sheets };
+      const first = sheets.findIndex((s) => C.detectColumns(s.rows).priceCol >= 0);
+      pickSheet(first >= 0 ? first : 0);
+      setMsg('');
+    } catch (err) {
+      setMsg('这个文件打不开。确认是 Excel 或 CSV 文件；还不行的话，在 Excel 里另存为 .xlsx 再试。', 'error');
+    }
+  });
+
+  function pickSheet(i) {
+    const sheet = wb.sheets[i];
+    const det = C.detectColumns(sheet.rows);
+    draft = { sheet: i, headerRow: det.headerRow, nameCol: det.nameCol, priceCol: det.priceCol };
+    const sheetSel = $('#map-sheet');
+    sheetSel.innerHTML = wb.sheets.map((s, k) => `<option value="${k}"${k === i ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+    $('#sheet-field').hidden = wb.sheets.length < 2;
+    fillColumnSelects();
+    renderDraft();
+    preview.hidden = false;
+  }
+
+  function fillColumnSelects() {
+    const rows = wb.sheets[draft.sheet].rows;
+    const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+    const head = draft.headerRow >= 0 ? rows[draft.headerRow] : [];
+    const sampleRow = rows[draft.headerRow + 1] || [];
+    const label = (k) => {
+      const h = head[k] != null && String(head[k]).trim() ? String(head[k]).trim() : `第 ${k + 1} 列`;
+      const sample = sampleRow[k] != null && String(sampleRow[k]).trim() ? `（如：${String(sampleRow[k]).trim().slice(0, 12)}）` : '';
+      return h + sample;
+    };
+    const opts = (sel) => ['<option value="-1">选一列</option>']
+      .concat(Array.from({ length: width }, (_, k) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(label(k))}</option>`))
+      .join('');
+    $('#map-name').innerHTML = opts(draft.nameCol);
+    $('#map-price').innerHTML = opts(draft.priceCol);
+  }
+
+  function renderDraft() {
+    const rows = wb.sheets[draft.sheet].rows;
+    const apply = $('#import-apply');
+    const count = $('#import-count');
+    const tbl = $('#import-table');
+    if (draft.nameCol < 0 || draft.priceCol < 0 || draft.nameCol === draft.priceCol) {
+      draft.parsed = null;
+      count.textContent = '没认出是哪两列。请在上面选一下「烟名」和「进价」各在哪一列。';
+      tbl.innerHTML = '';
+      apply.disabled = true;
+      return;
+    }
+    const parsed = C.tableFromRows(rows, draft);
+    draft.parsed = parsed;
+    apply.disabled = parsed.items.length === 0;
+    count.innerHTML = parsed.items.length
+      ? `认出 <b>${parsed.items.length}</b> 款烟${parsed.skipped ? `，跳过 ${parsed.skipped} 行（没有烟名或进价）` : ''}。先看一下前几行对不对：`
+      : '这两列里没读到能用的烟名和进价，换一列试试。';
+    const sample = parsed.items.slice(0, 6);
+    tbl.innerHTML = sample.length
+      ? `<thead><tr><th>烟名</th><th class="r">进价</th><th class="r">单包价</th><th class="r">整条价</th></tr></thead><tbody>` +
+        sample.map((it) => {
+          const p = C.quote(it.cost, state.settings, state.currency);
+          return `<tr><td>${esc(it.name)}</td><td class="r num">${fmtRMB(it.cost)}</td><td class="r num">${sym()}${fmtPrice(p.pack)}</td><td class="r num">${sym()}${fmtPrice(p.carton)}</td></tr>`;
+        }).join('') + '</tbody>'
+      : '';
+  }
+
+  $('#map-sheet').addEventListener('change', (e) => pickSheet(Number(e.target.value)));
+  $('#map-name').addEventListener('change', (e) => { draft.nameCol = Number(e.target.value); renderDraft(); });
+  $('#map-price').addEventListener('change', (e) => { draft.priceCol = Number(e.target.value); renderDraft(); });
+  $('#import-cancel').addEventListener('click', () => { preview.hidden = true; wb = null; draft = null; setMsg(''); });
+  $('#import-apply').addEventListener('click', () => {
+    if (!draft || !draft.parsed || !draft.parsed.items.length) return;
+    state.table = {
+      fileName: wb.fileName,
+      importedAt: Date.now(),
+      items: draft.parsed.items,
+    };
+    const changed = syncOrderToTable();
+    save();
+    preview.hidden = true;
+    wb = null; draft = null;
+    setMsg(`已换成「${state.table.fileName}」，共 ${state.table.items.length} 款。${changed ? `这一单里 ${changed} 款烟按新进价重算了。` : ''}`);
+    renderStatus();
+    renderOrder();
+  });
+  $('#reset-table').addEventListener('click', () => {
+    state.table = null;
+    syncOrderToTable();
+    save();
+    setMsg('已恢复自带的价格表。');
+    renderStatus();
+    renderOrder();
+  });
+
+  /** 表换了以后，这一单里已有的烟按名字找新进价 */
+  function syncOrderToTable() {
+    const byName = new Map(priceTable().items.map((it) => [it.name, it]));
+    let changed = 0;
+    for (const line of state.order) {
+      if (line.manual) continue;
+      const it = byName.get(line.name);
+      if (it) {
+        if (it.cost !== line.cost) changed++;
+        line.cost = it.cost;
+        line.extra = it.extra || {};
+        line.missing = false;
+      } else {
+        line.missing = true;
+      }
+    }
+    return changed;
+  }
+
+  /* ---------- 开始 ---------- */
+  renderSeg();
+  renderStatus();
+  renderOrder();
+})();
+</script>
+
+</body>
+</html>
